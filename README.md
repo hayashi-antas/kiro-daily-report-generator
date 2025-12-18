@@ -1,7 +1,7 @@
 # Daily Report Generator
 
 ルールベースで日報文を生成する、単一HTML構成のシンプルなWebアプリです。  
-仕様駆動開発（Spec-Driven Development）の体験を目的として作成しました。
+Kiroを使った仕様駆動開発（Spec-Driven Development）の体験を目的として作成しました。
 
 ---
 
