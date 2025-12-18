@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Runner</title>
+    <script src="https://cdn.jsdelivr.net/npm/fast-check@3.15.0/lib/bundle.js"></script>
+</head>
+<body>
+    <h1>Daily Report Generator Test Results</h1>
+    <div id="test-results"></div>
+    
+    <script>
+        // Capture console output
+        const testResults = [];
+        const originalConsoleLog = console.log;
+        const originalConsoleError = console.error;
+        
+        console.log = function(...args) {
+            testResults.push({ type: 'log', message: args.join(' ') });
+            originalConsoleLog.apply(console, args);
+        };
+        
+        console.error = function(...args) {
+            testResults.push({ type: 'error', message: args.join(' ') });
+            originalConsoleError.apply(console, args);
+        };
+        
+        // Load the main application script
+        fetch('index.html')
+            .then(response => response.text())
+            .then(html => {
+                // Extract JavaScript from the HTML
+                const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
+                if (scriptMatch) {
+                    const jsCode = scriptMatch[1];
+                    
+                    // Create a temporary div to simulate the DOM structure
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = html.match(/<body[^>]*>([\s\S]*?)<\/body>/)[1].replace(/<script>[\s\S]*?<\/script>/, '');
+                    document.body.appendChild(tempDiv);
+                    
+                    // Execute the JavaScript
+                    try {
+                        eval(jsCode);
+                        
+                        // Wait for tests to complete
+                        setTimeout(() => {
+                            displayResults();
+                        }, 2000);
+                    } catch (error) {
+                        console.error('Error executing JavaScript:', error);
+                        displayResults();
+                    }
+                } else {
+                    console.error('Could not extract JavaScript from HTML');
+                    displayResults();
+                }
+            })
+            .catch(error => {
+                console.error('Error loading index.html:', error);
+                displayResults();
+            });
+        
+        function displayResults() {
+            const resultsDiv = document.getElementById('test-results');
+            let html = '<h2>Test Execution Results:</h2>';
+            
+            testResults.forEach(result => {
+                const color = result.type === 'error' ? 'red' : 'black';
+                html += `<p style="color: ${color};">[${result.type.toUpperCase()}] ${result.message}</p>`;
+            });
+            
+            resultsDiv.innerHTML = html;
+            
+            // Also log to console for debugging
+            console.log('=== TEST RESULTS SUMMARY ===');
+            testResults.forEach(result => {
+                if (result.type === 'log') {
+                    originalConsoleLog(result.message);
+                } else {
+                    originalConsoleError(result.message);
+                }
+            });
+        }
+    </script>
+</body>
+</html>

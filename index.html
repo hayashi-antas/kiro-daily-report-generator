@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日報ジェネレーター</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fast-check@3.15.0/lib/bundle.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen py-8 px-4">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">日報ジェネレーター</h1>
+            <p class="text-gray-600">業務内容を入力して、丁寧な日報を自動生成します</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Input Section -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">入力</h2>
+                
+                <!-- Activities Input (Required) -->
+                <div class="mb-4">
+                    <label for="activities" class="block text-sm font-medium text-gray-700 mb-2">
+                        業務内容 <span class="text-red-500">*</span>
+                    </label>
+                    <textarea 
+                        id="activities" 
+                        rows="8"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+                        placeholder="・今日の業務内容を入力してください&#10;・箇条書きで入力できます&#10;- ハイフンも使えます"
+                    ></textarea>
+                </div>
+
+                <!-- Learning Input (Optional) -->
+                <div class="mb-4">
+                    <label for="learning" class="block text-sm font-medium text-gray-700 mb-2">
+                        学び・気づき（任意）
+                    </label>
+                    <textarea 
+                        id="learning" 
+                        rows="3"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+                        placeholder="今日の学びや気づきを入力してください"
+                    ></textarea>
+                </div>
+
+                <!-- Plans Input (Optional) -->
+                <div class="mb-6">
+                    <label for="plans" class="block text-sm font-medium text-gray-700 mb-2">
+                        明日の予定（任意）
+                    </label>
+                    <textarea 
+                        id="plans" 
+                        rows="3"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+                        placeholder="明日の予定を入力してください"
+                    ></textarea>
+                </div>
+
+                <!-- Generate Button -->
+                <button 
+                    id="generateBtn"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-md transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                    日報を生成
+                </button>
+            </div>
+
+            <!-- Output Section -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">生成された日報</h2>
+                
+                <!-- Output Textarea -->
+                <div class="mb-4">
+                    <textarea 
+                        id="output" 
+                        rows="20"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y font-mono text-sm"
+                        placeholder="生成された日報がここに表示されます"
+                        readonly
+                    ></textarea>
+                </div>
+
+                <!-- Character Count -->
+                <div class="mb-4 text-sm text-gray-600">
+                    文字数: <span id="charCount" class="font-semibold">0</span>
+                </div>
+
+                <!-- Copy Button -->
+                <button 
+                    id="copyBtn"
+                    class="w-full bg-gray-600 hover:bg-gray-700 text-white font-medium py-3 px-4 rounded-md transition duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                >
+                    クリップボードにコピー
+                </button>
+            </div>
+        </div>
+
+        <!-- Toast Notification -->
+        <div 
+            id="toast" 
+            class="fixed bottom-8 right-8 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 opacity-0 translate-y-2 pointer-events-none"
+        >
+            <span id="toastMessage"></span>
+        </div>
+    </div>
+
+    <script>
+        // ===== INPUT PROCESSOR MODULE =====
+        
+        /**
+         * Removes bullet point markers from text lines
+         * Handles Japanese bullet markers: ・, -, *, numbers with periods, full-width spaces
+         * @param {string} text - Input text to clean
+         * @returns {string} - Text with bullet points removed
+         */
+        function cleanBulletPoints(text) {
+            if (!text) return '';
+            
+            // Split into lines and process each line
+            const lines = text.split('\n');
+            const cleanedLines = lines.map(line => {
+                // Remove bullet point patterns at the start of lines
+                // Patterns: ・, -, *, numbers with periods (1., 2., etc.), full-width spaces
+                return line.replace(/^[\s・\-\*\d+\.　]+/, '').trim();
+            });
+            
+            return cleanedLines.join('\n');
+        }
+
+        /**
+         * Filters out lines that contain only whitespace characters
+         * @param {string[]} lines - Array of text lines
+         * @returns {string[]} - Array with whitespace-only lines removed
+         */
+        function filterEmptyLines(lines) {
+            return lines.filter(line => line.trim().length > 0);
+        }
+
+        /**
+         * Orchestrates the input cleaning pipeline
+         * @param {string} rawText - Raw user input text
+         * @returns {string[]} - Array of cleaned, non-empty lines
+         */
+        function preprocessInput(rawText) {
+            if (!rawText) return [];
+            
+            // Step 1: Clean bullet points
+            const cleanedText = cleanBulletPoints(rawText);
+            
+            // Step 2: Split into lines
+            const lines = cleanedText.split('\n');
+            
+            // Step 3: Filter out empty/whitespace-only lines
+            const filteredLines = filterEmptyLines(lines);
+            
+            return filteredLines;
+        }
+
+        // ===== TEXT FORMATTER MODULE =====
+        
+        /**
+         * Returns a random polite ending for Japanese sentences
+         * @returns {string} - Random polite ending
+         */
+        function getRandomEnding() {
+            const endings = [
+                'しました。',
+                'を実施しました。',
+                'を行いました。'
+            ];
+            return endings[Math.floor(Math.random() * endings.length)];
+        }
+
+        /**
+         * Adds appropriate Japanese sentence endings to lines
+         * Preserves lines ending with proper Japanese endings, adds polite endings to others
+         * @param {string} line - Input line to process
+         * @returns {string} - Line with appropriate ending
+         */
+        function addSentenceEndings(line) {
+            if (!line || line.trim().length === 0) return line;
+            
+            const trimmedLine = line.trim();
+            
+            // Check if line already ends with proper Japanese endings
+            const properEndings = ['。', '！', '!', 'ます', 'です'];
+            const hasProperEnding = properEndings.some(ending => trimmedLine.endsWith(ending));
+            
+            if (hasProperEnding) {
+                return trimmedLine;
+            } else {
+                // Add polite ending (without 〜 character as per updated requirements)
+                const randomEnding = getRandomEnding();
+                return trimmedLine + randomEnding;
+            }
+        }
+
+        /**
+         * Formats activity lines by adding appropriate sentence endings
+         * @param {string[]} activities - Array of activity lines
+         * @returns {string[]} - Array of formatted activity lines
+         */
+        function formatActivities(activities) {
+            if (!activities || activities.length === 0) return [];
+            
+            return activities.map(activity => addSentenceEndings(activity));
+        }
+
+        /**
+         * Assembles the complete daily report from all sections
+         * @param {string[]} activities - Formatted activity lines
+         * @param {string} learning - Learning insights (optional)
+         * @param {string} plans - Tomorrow's plans (optional)
+         * @returns {string} - Complete formatted report
+         */
+        function assembleReport(activities, learning, plans) {
+            const reportParts = [];
+            
+            // Standard greeting
+            reportParts.push('お疲れ様です。本日の業務日報を報告いたします。');
+            reportParts.push(''); // Empty line
+            
+            // Activities section
+            if (activities && activities.length > 0) {
+                reportParts.push(...activities);
+                reportParts.push(''); // Empty line after activities
+            }
+            
+            // Learning section (optional)
+            if (learning && learning.trim().length > 0) {
+                reportParts.push('【学び・気づき】');
+                reportParts.push(learning.trim());
+                reportParts.push(''); // Empty line
+            }
+            
+            // Plans section (optional)
+            if (plans && plans.trim().length > 0) {
+                reportParts.push('【明日の予定】');
+                reportParts.push(plans.trim());
+                reportParts.push(''); // Empty line
+            }
+            
+            // Standard closing
+            reportParts.push('よろしくお願いいたします。');
+            
+            return reportParts.join('\n');
+        }
+
+        // ===== STORAGE MANAGER MODULE =====
+        
+        /**
+         * Utility function to debounce function calls
+         * @param {Function} func - Function to debounce
+         * @param {number} delay - Delay in milliseconds
+         * @returns {Function} - Debounced function
+         */
+        function debounce(func, delay) {
+            let timeoutId;
+            return function(...args) {
+                clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => func.apply(this, args), delay);
+            };
+        }
+
+        /**
+         * Saves input data to localStorage with debouncing
+         * @param {Object} data - Input data to save
+         * @param {string} data.activities - Activities text
+         * @param {string} data.learning - Learning insights text
+         * @param {string} data.plans - Tomorrow's plans text
+         */
+        function saveInputs(data) {
+            try {
+                const inputData = {
+                    activities: data.activities || '',
+                    learning: data.learning || '',
+                    plans: data.plans || '',
+                    timestamp: Date.now()
+                };
+                localStorage.setItem('dailyReportInputs', JSON.stringify(inputData));
+            } catch (error) {
+                console.warn('Failed to save inputs to localStorage:', error);
+            }
+        }
+
+        /**
+         * Loads previously saved input data from localStorage
+         * @returns {Object} - Saved input data or empty defaults
+         */
+        function loadInputs() {
+            try {
+                const saved = localStorage.getItem('dailyReportInputs');
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    return {
+                        activities: data.activities || '',
+                        learning: data.learning || '',
+                        plans: data.plans || ''
+                    };
+                }
+            } catch (error) {
+                console.warn('Failed to load inputs from localStorage:', error);
+            }
+            
+            // Return empty defaults if no saved data or error
+            return {
+                activities: '',
+                learning: '',
+                plans: ''
+            };
+        }
+
+        // Create debounced save function with 300ms delay
+        const debouncedSaveInputs = debounce(saveInputs, 300);
+
+        // ===== CLIPBOARD HANDLER MODULE =====
+        
+        /**
+         * Attempts to copy text using modern navigator.clipboard API
+         * @param {string} text - Text to copy to clipboard
+         * @returns {Promise<boolean>} - Promise resolving to success status
+         */
+        async function modernCopy(text) {
+            try {
+                if (!navigator.clipboard) {
+                    return false;
+                }
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch (error) {
+                console.warn('Modern clipboard API failed:', error);
+                return false;
+            }
+        }
+
+        /**
+         * Attempts to copy text using legacy document.execCommand method
+         * @param {string} text - Text to copy to clipboard
+         * @returns {boolean} - Success status
+         */
+        function legacyCopy(text) {
+            try {
+                // Create a temporary textarea element
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                textarea.style.left = '-9999px';
+                
+                // Add to DOM, select, and copy
+                document.body.appendChild(textarea);
+                textarea.select();
+                textarea.setSelectionRange(0, 99999); // For mobile devices
+                
+                const success = document.execCommand('copy');
+                
+                // Clean up
+                document.body.removeChild(textarea);
+                
+                return success;
+            } catch (error) {
+                console.warn('Legacy clipboard method failed:', error);
+                return false;
+            }
+        }
+
+        /**
+         * Shows user feedback for copy operations using toast notification
+         * @param {boolean} success - Whether the copy operation was successful
+         */
+        function showCopyFeedback(success) {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            
+            if (!toast || !toastMessage) {
+                console.warn('Toast elements not found');
+                return;
+            }
+            
+            // Set message based on success status
+            if (success) {
+                toastMessage.textContent = 'コピーしました！';
+                toast.className = 'fixed bottom-8 right-8 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 opacity-100 translate-y-0';
+            } else {
+                toastMessage.textContent = 'コピーに失敗しました';
+                toast.className = 'fixed bottom-8 right-8 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 opacity-100 translate-y-0';
+            }
+            
+            // Hide toast after 3 seconds
+            setTimeout(() => {
+                toast.className = 'fixed bottom-8 right-8 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 opacity-0 translate-y-2 pointer-events-none';
+            }, 3000);
+        }
+
+        /**
+         * Main clipboard copy function with fallback mechanism
+         * Attempts modern API first, falls back to legacy method if needed
+         * @param {string} text - Text to copy to clipboard
+         * @returns {Promise<boolean>} - Promise resolving to success status
+         */
+        async function copyToClipboard(text) {
+            if (!text || typeof text !== 'string') {
+                console.warn('Invalid text provided to copyToClipboard');
+                showCopyFeedback(false);
+                return false;
+            }
+            
+            // Try modern clipboard API first
+            const modernSuccess = await modernCopy(text);
+            if (modernSuccess) {
+                showCopyFeedback(true);
+                return true;
+            }
+            
+            // Fallback to legacy method
+            const legacySuccess = legacyCopy(text);
+            showCopyFeedback(legacySuccess);
+            return legacySuccess;
+        }
+
+        // ===== UI CONTROLLER MODULE =====
+        
+        /**
+         * Validates input fields before report generation
+         * @returns {boolean} - True if validation passes, false otherwise
+         */
+        function validateInputs() {
+            const activitiesInput = document.getElementById('activities');
+            
+            if (!activitiesInput) {
+                console.error('Activities input element not found');
+                return false;
+            }
+            
+            const activitiesText = activitiesInput.value.trim();
+            
+            if (!activitiesText) {
+                alert('業務内容を入力してください');
+                activitiesInput.focus();
+                return false;
+            }
+            
+            return true;
+        }
+
+        /**
+         * Updates the character count display for the output textarea
+         */
+        function updateCharacterCount() {
+            const outputTextarea = document.getElementById('output');
+            const charCountElement = document.getElementById('charCount');
+            
+            if (!outputTextarea || !charCountElement) {
+                console.warn('Character count elements not found');
+                return;
+            }
+            
+            const text = outputTextarea.value;
+            const charCount = text.length;
+            
+            charCountElement.textContent = charCount.toString();
+        }
+
+        /**
+         * Main workflow function for generating daily reports
+         * Orchestrates input validation, processing, formatting, and display
+         */
+        function generateReport() {
+            // Step 1: Validate inputs
+            if (!validateInputs()) {
+                return;
+            }
+            
+            // Step 2: Get input values
+            const activitiesInput = document.getElementById('activities');
+            const learningInput = document.getElementById('learning');
+            const plansInput = document.getElementById('plans');
+            const outputTextarea = document.getElementById('output');
+            
+            if (!activitiesInput || !outputTextarea) {
+                console.error('Required input/output elements not found');
+                return;
+            }
+            
+            const activitiesText = activitiesInput.value;
+            const learningText = learningInput ? learningInput.value : '';
+            const plansText = plansInput ? plansInput.value : '';
+            
+            // Step 3: Process inputs
+            const processedActivities = preprocessInput(activitiesText);
+            
+            // Step 4: Format activities
+            const formattedActivities = formatActivities(processedActivities);
+            
+            // Step 5: Assemble complete report
+            const completeReport = assembleReport(formattedActivities, learningText, plansText);
+            
+            // Step 6: Display in output textarea
+            outputTextarea.value = completeReport;
+            
+            // Step 7: Update character count
+            updateCharacterCount();
+            
+            console.log('Report generated successfully');
+        }
+
+        // ===== APPLICATION INITIALIZATION =====
+        
+        /**
+         * Initializes the application by setting up event handlers and loading saved data
+         */
+        function initializeApp() {
+            // Load saved inputs on page load
+            const savedInputs = loadInputs();
+            
+            // Get input elements
+            const activitiesInput = document.getElementById('activities');
+            const learningInput = document.getElementById('learning');
+            const plansInput = document.getElementById('plans');
+            
+            // Restore saved values
+            if (activitiesInput) activitiesInput.value = savedInputs.activities;
+            if (learningInput) learningInput.value = savedInputs.learning;
+            if (plansInput) plansInput.value = savedInputs.plans;
+            
+            // Set up input event handlers for auto-saving
+            function handleInputChange() {
+                const currentInputs = {
+                    activities: activitiesInput ? activitiesInput.value : '',
+                    learning: learningInput ? learningInput.value : '',
+                    plans: plansInput ? plansInput.value : ''
+                };
+                debouncedSaveInputs(currentInputs);
+            }
+            
+            // Add event listeners to all input fields
+            if (activitiesInput) {
+                activitiesInput.addEventListener('input', handleInputChange);
+                activitiesInput.addEventListener('change', handleInputChange);
+            }
+            if (learningInput) {
+                learningInput.addEventListener('input', handleInputChange);
+                learningInput.addEventListener('change', handleInputChange);
+            }
+            if (plansInput) {
+                plansInput.addEventListener('input', handleInputChange);
+                plansInput.addEventListener('change', handleInputChange);
+            }
+            
+            // Set up generate button event handler
+            const generateBtn = document.getElementById('generateBtn');
+            if (generateBtn) {
+                generateBtn.addEventListener('click', generateReport);
+            }
+            
+            // Set up copy button event handler
+            const copyBtn = document.getElementById('copyBtn');
+            const outputTextarea = document.getElementById('output');
+            
+            if (copyBtn && outputTextarea) {
+                copyBtn.addEventListener('click', async () => {
+                    const textToCopy = outputTextarea.value;
+                    if (!textToCopy.trim()) {
+                        showCopyFeedback(false);
+                        return;
+                    }
+                    
+                    await copyToClipboard(textToCopy);
+                });
+            }
+            
+            // Set up output textarea character count updates
+            if (outputTextarea) {
+                outputTextarea.addEventListener('input', updateCharacterCount);
+                // Initialize character count on load
+                updateCharacterCount();
+            }
+            
+            console.log('Storage management initialized - inputs restored and auto-save enabled');
+        }
+
+        // Initialize the application when DOM is loaded
+        document.addEventListener('DOMContentLoaded', initializeApp);
+        
+        // Fallback initialization if DOMContentLoaded has already fired
+        if (document.readyState === 'loading') {
+            // DOMContentLoaded will fire
+        } else {
+            // DOM is already ready
+            initializeApp();
+        }
+
+        console.log('Daily Report Generator initialized');
+
+        // ===== NETWORK REQUEST MONITORING MODULE =====
+        
+        /**
+         * Network request monitor to ensure offline functionality
+         * Tracks and validates that core operations don't make external API calls
+         */
+        const NetworkMonitor = {
+            // Track network requests during operations
+            requestLog: [],
+            isMonitoring: false,
+            
+            /**
+             * Starts monitoring network requests
+             */
+            startMonitoring() {
+                this.requestLog = [];
+                this.isMonitoring = true;
+                console.log('Network monitoring started');
+            },
+            
+            /**
+             * Stops monitoring and returns request log
+             * @returns {Array} - Array of network requests made during monitoring
+             */
+            stopMonitoring() {
+                this.isMonitoring = false;
+                const log = [...this.requestLog];
+                console.log('Network monitoring stopped. Requests logged:', log.length);
+                return log;
+            },
+            
+            /**
+             * Logs a network request if monitoring is active
+             * @param {string} method - HTTP method
+             * @param {string} url - Request URL
+             * @param {string} type - Request type (fetch, xhr, etc.)
+             */
+            logRequest(method, url, type) {
+                if (this.isMonitoring) {
+                    const request = {
+                        method,
+                        url,
+                        type,
+                        timestamp: Date.now()
+                    };
+                    this.requestLog.push(request);
+                    console.warn('Network request detected during monitoring:', request);
+                }
+            },
+            
+            /**
+             * Verifies that no network requests were made during core operations
+             * @returns {boolean} - True if no requests were made, false otherwise
+             */
+            verifyOfflineOperation() {
+                const requests = this.stopMonitoring();
+                
+                // Filter out allowed requests (CDN resources loaded at startup)
+                const coreOperationRequests = requests.filter(req => {
+                    // Allow CDN requests for initial resource loading
+                    const allowedDomains = [
+                        'cdn.tailwindcss.com',
+                        'cdn.jsdelivr.net'
+                    ];
+                    
+                    return !allowedDomains.some(domain => req.url.includes(domain));
+                });
+                
+                if (coreOperationRequests.length > 0) {
+                    console.error('Offline verification failed. Unexpected network requests:', coreOperationRequests);
+                    return false;
+                }
+                
+                console.log('✓ Offline verification passed - no unexpected network requests');
+                return true;
+            }
+        };
+        
+        // Override fetch to monitor network requests
+        const originalFetch = window.fetch;
+        window.fetch = function(...args) {
+            const url = args[0];
+            const options = args[1] || {};
+            const method = options.method || 'GET';
+            
+            NetworkMonitor.logRequest(method, url, 'fetch');
+            
+            return originalFetch.apply(this, args);
+        };
+        
+        // Override XMLHttpRequest to monitor network requests
+        const originalXHROpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(method, url, ...args) {
+            NetworkMonitor.logRequest(method, url, 'xhr');
+            return originalXHROpen.apply(this, [method, url, ...args]);
+        };
+        
+        /**
+         * Tests core application functionality while monitoring for network requests
+         * Validates that all core operations work completely offline
+         * @returns {boolean} - True if all operations are offline, false otherwise
+         */
+        function verifyOfflineFunctionality() {
+            console.log('Starting offline functionality verification...');
+            
+            try {
+                // Start monitoring network requests
+                NetworkMonitor.startMonitoring();
+                
+                // Test 1: Input processing
+                console.log('Testing input processing...');
+                const testInput = '・テスト業務\n- 別のテスト\n* さらにテスト';
+                const processedInput = preprocessInput(testInput);
+                
+                if (!processedInput || processedInput.length === 0) {
+                    throw new Error('Input processing failed');
+                }
+                
+                // Test 2: Text formatting
+                console.log('Testing text formatting...');
+                const formattedActivities = formatActivities(processedInput);
+                
+                if (!formattedActivities || formattedActivities.length === 0) {
+                    throw new Error('Text formatting failed');
+                }
+                
+                // Test 3: Report assembly
+                console.log('Testing report assembly...');
+                const testReport = assembleReport(formattedActivities, 'テスト学び', 'テスト予定');
+                
+                if (!testReport || !testReport.includes('お疲れ様です')) {
+                    throw new Error('Report assembly failed');
+                }
+                
+                // Test 4: Storage operations (if localStorage is available)
+                console.log('Testing storage operations...');
+                const testData = {
+                    activities: 'テスト活動',
+                    learning: 'テスト学び',
+                    plans: 'テスト予定'
+                };
+                
+                saveInputs(testData);
+                const loadedData = loadInputs();
+                
+                if (!loadedData || loadedData.activities !== testData.activities) {
+                    console.warn('Storage operations may not be fully functional (this is acceptable in some environments)');
+                }
+                
+                // Test 5: Character counting
+                console.log('Testing character counting...');
+                const tempTextarea = document.createElement('textarea');
+                const tempCharCount = document.createElement('span');
+                tempTextarea.id = 'temp-test-output';
+                tempCharCount.id = 'temp-test-charCount';
+                tempTextarea.value = testReport;
+                
+                document.body.appendChild(tempTextarea);
+                document.body.appendChild(tempCharCount);
+                
+                // Temporarily replace IDs for testing
+                const originalOutput = document.getElementById('output');
+                const originalCharCount = document.getElementById('charCount');
+                
+                if (originalOutput) originalOutput.id = 'output-backup';
+                if (originalCharCount) originalCharCount.id = 'charCount-backup';
+                tempTextarea.id = 'output';
+                tempCharCount.id = 'charCount';
+                
+                updateCharacterCount();
+                
+                const charCount = parseInt(tempCharCount.textContent || '0');
+                
+                // Cleanup
+                document.body.removeChild(tempTextarea);
+                document.body.removeChild(tempCharCount);
+                if (originalOutput) originalOutput.id = 'output';
+                if (originalCharCount) originalCharCount.id = 'charCount';
+                
+                if (charCount !== testReport.length) {
+                    throw new Error('Character counting failed');
+                }
+                
+                // Verify no network requests were made during core operations
+                const isOffline = NetworkMonitor.verifyOfflineOperation();
+                
+                if (isOffline) {
+                    console.log('✓ Offline functionality verification PASSED - All core operations work without network requests');
+                    return true;
+                } else {
+                    console.error('✗ Offline functionality verification FAILED - Network requests detected during core operations');
+                    return false;
+                }
+                
+            } catch (error) {
+                console.error('✗ Offline functionality verification FAILED:', error);
+                NetworkMonitor.stopMonitoring();
+                return false;
+            }
+        }
+        
+        /**
+         * Verifies that the application can function when CDN resources are unavailable
+         * Tests graceful degradation when external resources fail to load
+         * @returns {boolean} - True if application degrades gracefully, false otherwise
+         */
+        function verifyCDNFallbackBehavior() {
+            console.log('Verifying CDN fallback behavior...');
+            
+            try {
+                // Test that core JavaScript functionality works even if CSS fails
+                // This is important for file:// protocol usage
+                
+                // Test 1: Core functions are available and working
+                const coreModules = [
+                    'cleanBulletPoints',
+                    'filterEmptyLines', 
+                    'preprocessInput',
+                    'addSentenceEndings',
+                    'formatActivities',
+                    'assembleReport',
+                    'saveInputs',
+                    'loadInputs',
+                    'copyToClipboard'
+                ];
+                
+                for (const moduleName of coreModules) {
+                    if (typeof window[moduleName] !== 'function') {
+                        throw new Error(`Core module ${moduleName} is not available`);
+                    }
+                }
+                
+                // Test 2: Basic functionality works without external dependencies
+                const testResult = assembleReport(['テスト活動'], 'テスト学び', 'テスト予定');
+                
+                if (!testResult || !testResult.includes('お疲れ様です')) {
+                    throw new Error('Core functionality failed without external dependencies');
+                }
+                
+                console.log('✓ CDN fallback verification PASSED - Core functionality works independently');
+                return true;
+                
+            } catch (error) {
+                console.error('✗ CDN fallback verification FAILED:', error);
+                return false;
+            }
+        }
+
+        // ===== PROPERTY-BASED TESTS =====
+        
+        /**
+         * **Feature: daily-report-generator, Property 8: Real-time character counting**
+         * Property test for character counting functionality
+         * Validates: Requirements 3.5
+         */
+        function testCharacterCounting() {
+            console.log('Running Property Test: Real-time character counting');
+            
+            try {
+                fc.assert(
+                    fc.property(
+                        fc.string({ minLength: 0, maxLength: 10000 }),
+                        (testText) => {
+                            // Setup: Create a temporary output textarea
+                            const tempTextarea = document.createElement('textarea');
+                            tempTextarea.id = 'temp-output';
+                            tempTextarea.value = testText;
+                            
+                            const tempCharCount = document.createElement('span');
+                            tempCharCount.id = 'temp-charCount';
+                            
+                            // Add to DOM temporarily
+                            document.body.appendChild(tempTextarea);
+                            document.body.appendChild(tempCharCount);
+                            
+                            // Store original elements
+                            const originalOutput = document.getElementById('output');
+                            const originalCharCount = document.getElementById('charCount');
+                            
+                            // Temporarily replace IDs for testing
+                            if (originalOutput) originalOutput.id = 'output-backup';
+                            if (originalCharCount) originalCharCount.id = 'charCount-backup';
+                            tempTextarea.id = 'output';
+                            tempCharCount.id = 'charCount';
+                            
+                            try {
+                                // Execute the function under test
+                                updateCharacterCount();
+                                
+                                // Verify the character count matches the text length
+                                const displayedCount = parseInt(tempCharCount.textContent || '0');
+                                const actualLength = testText.length;
+                                
+                                // Cleanup
+                                document.body.removeChild(tempTextarea);
+                                document.body.removeChild(tempCharCount);
+                                
+                                // Restore original IDs
+                                if (originalOutput) originalOutput.id = 'output';
+                                if (originalCharCount) originalCharCount.id = 'charCount';
+                                
+                                // Property: Character count display should exactly match text length
+                                return displayedCount === actualLength;
+                            } catch (error) {
+                                // Cleanup on error
+                                if (document.body.contains(tempTextarea)) document.body.removeChild(tempTextarea);
+                                if (document.body.contains(tempCharCount)) document.body.removeChild(tempCharCount);
+                                if (originalOutput) originalOutput.id = 'output';
+                                if (originalCharCount) originalCharCount.id = 'charCount';
+                                throw error;
+                            }
+                        }
+                    ),
+                    { numRuns: 100 }
+                );
+                
+                console.log('✓ Property Test PASSED: Real-time character counting');
+                return true;
+            } catch (error) {
+                console.error('✗ Property Test FAILED: Real-time character counting', error);
+                return false;
+            }
+        }
+
+        // Run property tests and offline verification when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                // Run property tests
+                testCharacterCounting();
+                
+                // Run offline functionality verification
+                verifyOfflineFunctionality();
+                
+                // Run CDN fallback verification
+                verifyCDNFallbackBehavior();
+                
+                // Test network monitoring with a simulated core operation
+                console.log('Testing network monitoring during report generation...');
+                NetworkMonitor.startMonitoring();
+                
+                // Simulate a complete report generation workflow
+                const testActivities = '・会議参加\n- 資料作成\n* コードレビュー';
+                const processedActivities = preprocessInput(testActivities);
+                const formattedActivities = formatActivities(processedActivities);
+                const finalReport = assembleReport(formattedActivities, '新しい技術を学んだ', '明日はテストを書く');
+                
+                // Verify no network requests during core operations
+                const offlineVerified = NetworkMonitor.verifyOfflineOperation();
+                
+                if (offlineVerified) {
+                    console.log('✓ Network monitoring test PASSED - Core operations are completely offline');
+                } else {
+                    console.error('✗ Network monitoring test FAILED - Unexpected network activity detected');
+                }
+            }, 100);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Function Validation</title>
+    <script src="https://cdn.jsdelivr.net/npm/fast-check@3.15.0/lib/bundle.js"></script>
+</head>
+<body>
+    <h1>Function Validation Results</h1>
+    <div id="results"></div>
+    
+    <script>
+        const results = [];
+        
+        function log(message, isError = false) {
+            results.push({ message, isError });
+            console.log(message);
+        }
+        
+        // Copy the core functions from the main file
+        function cleanBulletPoints(text) {
+            if (!text) return '';
+            
+            const lines = text.split('\n');
+            const cleanedLines = lines.map(line => {
+                return line.replace(/^[\s・\-\*\d+\.　]+/, '').trim();
+            });
+            
+            return cleanedLines.join('\n');
+        }
+
+        function filterEmptyLines(lines) {
+            return lines.filter(line => line.trim().length > 0);
+        }
+
+        function preprocessInput(rawText) {
+            if (!rawText) return [];
+            
+            const cleanedText = cleanBulletPoints(rawText);
+            const lines = cleanedText.split('\n');
+            const filteredLines = filterEmptyLines(lines);
+            
+            return filteredLines;
+        }
+
+        function getRandomEnding() {
+            const endings = [
+                '〜しました。',
+                '〜を実施しました。',
+                '〜を行いました。'
+            ];
+            return endings[Math.floor(Math.random() * endings.length)];
+        }
+
+        function addSentenceEndings(line) {
+            if (!line || line.trim().length === 0) return line;
+            
+            const trimmedLine = line.trim();
+            
+            const properEndings = ['。', '！', 'ます', 'です'];
+            const hasProperEnding = properEndings.some(ending => trimmedLine.endsWith(ending));
+            
+            if (hasProperEnding) {
+                return trimmedLine;
+            } else {
+                const randomEnding = getRandomEnding();
+                return trimmedLine + randomEnding;
+            }
+        }
+
+        function formatActivities(activities) {
+            if (!activities || activities.length === 0) return [];
+            
+            return activities.map(activity => addSentenceEndings(activity));
+        }
+
+        function assembleReport(activities, learning, plans) {
+            const reportParts = [];
+            
+            reportParts.push('お疲れ様です。本日の業務日報を報告いたします。');
+            reportParts.push('');
+            
+            if (activities && activities.length > 0) {
+                reportParts.push(...activities);
+                reportParts.push('');
+            }
+            
+            if (learning && learning.trim().length > 0) {
+                reportParts.push('【学び・気づき】');
+                reportParts.push(learning.trim());
+                reportParts.push('');
+            }
+            
+            if (plans && plans.trim().length > 0) {
+                reportParts.push('【明日の予定】');
+                reportParts.push(plans.trim());
+                reportParts.push('');
+            }
+            
+            reportParts.push('よろしくお願いいたします。');
+            
+            return reportParts.join('\n');
+        }
+        
+        // Run validation tests
+        function runValidationTests() {
+            log('Starting function validation tests...');
+            
+            try {
+                // Test 1: cleanBulletPoints
+                const testInput1 = '・テスト業務\n- 別のテスト\n* さらにテスト\n1. 番号付きテスト';
+                const result1 = cleanBulletPoints(testInput1);
+                const expected1 = 'テスト業務\n別のテスト\nさらにテスト\n番号付きテスト';
+                
+                if (result1 === expected1) {
+                    log('✓ cleanBulletPoints test PASSED');
+                } else {
+                    log('✗ cleanBulletPoints test FAILED', true);
+                    log(`Expected: ${expected1}`, true);
+                    log(`Got: ${result1}`, true);
+                }
+                
+                // Test 2: filterEmptyLines
+                const testLines = ['テスト', '', '   ', 'もう一つのテスト'];
+                const result2 = filterEmptyLines(testLines);
+                const expected2 = ['テスト', 'もう一つのテスト'];
+                
+                if (JSON.stringify(result2) === JSON.stringify(expected2)) {
+                    log('✓ filterEmptyLines test PASSED');
+                } else {
+                    log('✗ filterEmptyLines test FAILED', true);
+                    log(`Expected: ${JSON.stringify(expected2)}`, true);
+                    log(`Got: ${JSON.stringify(result2)}`, true);
+                }
+                
+                // Test 3: preprocessInput
+                const result3 = preprocessInput(testInput1);
+                const expected3 = ['テスト業務', '別のテスト', 'さらにテスト', '番号付きテスト'];
+                
+                if (JSON.stringify(result3) === JSON.stringify(expected3)) {
+                    log('✓ preprocessInput test PASSED');
+                } else {
+                    log('✗ preprocessInput test FAILED', true);
+                    log(`Expected: ${JSON.stringify(expected3)}`, true);
+                    log(`Got: ${JSON.stringify(result3)}`, true);
+                }
+                
+                // Test 4: addSentenceEndings
+                const result4a = addSentenceEndings('テスト業務');
+                const result4b = addSentenceEndings('テスト業務です');
+                
+                if (result4a.includes('しました') || result4a.includes('実施しました') || result4a.includes('行いました')) {
+                    log('✓ addSentenceEndings test (no ending) PASSED');
+                } else {
+                    log('✗ addSentenceEndings test (no ending) FAILED', true);
+                    log(`Got: ${result4a}`, true);
+                }
+                
+                if (result4b === 'テスト業務です') {
+                    log('✓ addSentenceEndings test (with ending) PASSED');
+                } else {
+                    log('✗ addSentenceEndings test (with ending) FAILED', true);
+                    log(`Expected: テスト業務です`, true);
+                    log(`Got: ${result4b}`, true);
+                }
+                
+                // Test 5: assembleReport
+                const testActivities = ['テスト業務しました。', '別の業務を実施しました。'];
+                const result5 = assembleReport(testActivities, 'テスト学び', 'テスト予定');
+                
+                if (result5.includes('お疲れ様です') && 
+                    result5.includes('【学び・気づき】') && 
+                    result5.includes('【明日の予定】') && 
+                    result5.includes('よろしくお願いいたします')) {
+                    log('✓ assembleReport test PASSED');
+                } else {
+                    log('✗ assembleReport test FAILED', true);
+                    log(`Result: ${result5}`, true);
+                }
+                
+                log('All validation tests completed!');
+                
+            } catch (error) {
+                log(`✗ Validation test error: ${error.message}`, true);
+            }
+        }
+        
+        // Display results
+        function displayResults() {
+            const resultsDiv = document.getElementById('results');
+            let html = '';
+            
+            results.forEach(result => {
+                const color = result.isError ? 'red' : 'green';
+                html += `<p style="color: ${color};">${result.message}</p>`;
+            });
+            
+            resultsDiv.innerHTML = html;
+        }
+        
+        // Run tests when page loads
+        window.onload = function() {
+            runValidationTests();
+            displayResults();
+        };
+    </script>
+</body>
+</html>

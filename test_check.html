@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Check</title>
+    <script src="https://cdn.jsdelivr.net/npm/fast-check@3.15.0/lib/bundle.js"></script>
+</head>
+<body>
+    <h1>Test Status Check</h1>
+    <div id="status"></div>
+    
+    <script>
+        const statusDiv = document.getElementById('status');
+        let statusHTML = '';
+        
+        // Check if fast-check is loaded
+        if (typeof fc !== 'undefined') {
+            statusHTML += '<p style="color: green;">✓ fast-check library loaded successfully</p>';
+            
+            // Test a simple property
+            try {
+                fc.assert(
+                    fc.property(fc.integer(), (n) => n === n),
+                    { numRuns: 10 }
+                );
+                statusHTML += '<p style="color: green;">✓ fast-check basic test passed</p>';
+            } catch (error) {
+                statusHTML += '<p style="color: red;">✗ fast-check basic test failed: ' + error.message + '</p>';
+            }
+        } else {
+            statusHTML += '<p style="color: red;">✗ fast-check library not loaded</p>';
+        }
+        
+        // Check if DOM manipulation works
+        try {
+            const testDiv = document.createElement('div');
+            testDiv.id = 'test-element';
+            document.body.appendChild(testDiv);
+            
+            const found = document.getElementById('test-element');
+            if (found) {
+                statusHTML += '<p style="color: green;">✓ DOM manipulation works</p>';
+                document.body.removeChild(testDiv);
+            } else {
+                statusHTML += '<p style="color: red;">✗ DOM manipulation failed</p>';
+            }
+        } catch (error) {
+            statusHTML += '<p style="color: red;">✗ DOM manipulation error: ' + error.message + '</p>';
+        }
+        
+        // Test character counting function
+        function updateCharacterCount() {
+            const outputTextarea = document.getElementById('output');
+            const charCountElement = document.getElementById('charCount');
+            
+            if (!outputTextarea || !charCountElement) {
+                return false;
+            }
+            
+            const text = outputTextarea.value;
+            const charCount = text.length;
+            
+            charCountElement.textContent = charCount.toString();
+            return true;
+        }
+        
+        // Test the character counting with mock elements
+        try {
+            const mockTextarea = document.createElement('textarea');
+            mockTextarea.id = 'output';
+            mockTextarea.value = 'Test text 123';
+            
+            const mockSpan = document.createElement('span');
+            mockSpan.id = 'charCount';
+            
+            document.body.appendChild(mockTextarea);
+            document.body.appendChild(mockSpan);
+            
+            const result = updateCharacterCount();
+            const count = parseInt(mockSpan.textContent);
+            
+            if (result && count === 13) {
+                statusHTML += '<p style="color: green;">✓ Character counting function works</p>';
+            } else {
+                statusHTML += '<p style="color: red;">✗ Character counting function failed (expected 13, got ' + count + ')</p>';
+            }
+            
+            document.body.removeChild(mockTextarea);
+            document.body.removeChild(mockSpan);
+        } catch (error) {
+            statusHTML += '<p style="color: red;">✗ Character counting test error: ' + error.message + '</p>';
+        }
+        
+        statusDiv.innerHTML = statusHTML;
+    </script>
+</body>
+</html>
